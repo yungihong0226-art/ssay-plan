@@ -468,15 +468,15 @@
     return round1(total / state.subjects.length);
   }
 
+  // 같은 기기가 여러 번 계획을 만들거나 체크인해도 매번 새 행을 남긴다 (덮어쓰지 않음).
   function syncStudyStats(){
     if (!supabaseClient) return;
-    supabaseClient.from('study_stats').upsert({
+    supabaseClient.from('study_stats').insert({
       device_id: getDeviceId(),
       avg_daily_hours: computeAvgDailyHours(),
       progress_rate: computeOverallProgressRate(),
-      avg_days_before_exam: computeAvgDaysBeforeExam(),
-      updated_at: new Date().toISOString()
-    }, { onConflict: 'device_id' }).then(function(res){
+      avg_days_before_exam: computeAvgDaysBeforeExam()
+    }).then(function(res){
       if (res.error) console.warn('analytics(study_stats) failed', res.error);
     });
   }
@@ -498,9 +498,11 @@
     el.innerHTML = '<div class="lb-title">🔥 다른 이용자들의 학습 현황</div>' + items;
   }
 
+  // study_stats 는 기기별 전체 이력이 쌓이는 로그라, 리더보드는 기기별 최신 값만
+  // 모아둔 study_stats_latest 뷰에서 읽는다.
   function loadLeaderboard(){
     if (!supabaseClient) return;
-    supabaseClient.from('study_stats')
+    supabaseClient.from('study_stats_latest')
       .select('avg_daily_hours,progress_rate,avg_days_before_exam')
       .order('progress_rate', { ascending: false })
       .limit(10)

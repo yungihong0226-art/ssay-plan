@@ -11,8 +11,7 @@
 ## 사용 데이터 & 리더보드 (Supabase)
 
 로그인 없이 브라우저에 저장된 임의의 기기 ID로만 이용자를 구분합니다. 세 지표를
-표 여러 개로 나누지 않고 **기기(=이용자) 한 명당 한 행**, `study_stats` 한 표에
-합쳐서 저장합니다.
+표 여러 개로 나누지 않고 `study_stats` 한 표의 컬럼으로 합쳐서 저장합니다.
 
 | 컬럼 | 의미 |
 |---|---|
@@ -21,15 +20,20 @@
 | `avg_days_before_exam` | 계획 수립 시 시험들까지 남은 기간의 평균(일) |
 
 계획을 만들거나 수정할 때, 그리고 하루를 체크인할 때마다 이 값들을 다시 계산해서
-`device_id` 기준으로 upsert합니다. 앱 하단 "다른 이용자들의 학습 현황" 패널은 이
-표를 진행률 순으로 상위 10개 읽어와 보여줍니다.
+새 행으로 추가(insert)합니다. **같은 기기가 여러 번 접속해도 기존 행을 덮어쓰지
+않고 매번 쌓이는 이력 로그**입니다. 앱 하단 "다른 이용자들의 학습 현황" 패널은
+기기별 최신 값만 모은 `study_stats_latest` 뷰를 진행률 순으로 상위 10개 읽어와
+보여줍니다.
 
-이 표는 리더보드 목적이라 **누구나 조회(SELECT)할 수 있게** 열어뒀습니다 (개인
-식별 정보는 담지 않음). 기존 mvp-service 프로젝트의 `plan_snapshots`/`daily_logs`
-(그쪽은 조회 자체가 막힌 내부 분석용 테이블)와는 성격이 다릅니다.
+`study_stats`/`study_stats_latest`는 리더보드 목적이라 **누구나 조회(SELECT)할
+수 있게** 열어뒀습니다 (개인 식별 정보는 담지 않음). 기존 mvp-service 프로젝트의
+`plan_snapshots`/`daily_logs`(그쪽은 조회 자체가 막힌 내부 분석용 테이블)와는
+성격이 다릅니다.
 
 ### 설정 방법
 
-1. Supabase 대시보드(이 사이트 전용 프로젝트 "dday plan", `kvpbctapwesdqznnrsqv`)의 SQL Editor에서 [`supabase/schema.sql`](supabase/schema.sql)을 실행해 `study_stats` 테이블을 만듭니다.
+1. Supabase 대시보드(이 사이트 전용 프로젝트 "dday plan", `kvpbctapwesdqznnrsqv`)의 SQL Editor에서:
+   - 처음 세팅하는 경우: [`supabase/schema.sql`](supabase/schema.sql) 실행
+   - 이미 이전 버전(device_id UNIQUE + upsert 방식)으로 만들어져 있는 경우: [`supabase/migrate_allow_multiple_rows.sql`](supabase/migrate_allow_multiple_rows.sql) 실행
 2. `index.html`의 `SUPABASE_URL`/`SUPABASE_ANON_KEY`는 이미 이 프로젝트 값으로 채워져 있습니다.
 3. Vercel 프로젝트(`dday-plan-vercel`)를 이 저장소에 연결하면 push할 때마다 자동 배포됩니다.
