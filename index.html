@@ -623,6 +623,29 @@
       .map(function(s){ return { id:s.id, name:s.name, color:s.color, shortfall: s.remainingHours }; });
   }
 
+  // 그 날짜에 배정된 권장 학습량을 실제로 다 채웠는지 확인.
+  function isPlanFullyCompletedForDate(dayDate){
+    var dstr = toISODate(dayDate);
+    var allocMap = recommendedForDay(dayDate);
+    var requiredIds = Object.keys(allocMap).filter(function(id){ return (allocMap[id] || 0) > 0.01; });
+    if (requiredIds.length === 0) return true;
+    if (!state.historyByDate.hasOwnProperty(dstr)) return false;
+    var actualMap = state.historyByDate[dstr] || {};
+    return requiredIds.every(function(id){ return (actualMap[id] || 0) + 0.05 >= (allocMap[id] || 0); });
+  }
+  // 오늘(또는 과거)은 항상 편집 가능. 미래 날짜는 오늘부터 그 전날까지 하루도 빠짐없이
+  // 목표를 모두 끝냈을 때만 열린다 — 당일 학습을 완료하면 다음 날 일정도 미리 할 수 있다.
+  function canEditDate(dayDate){
+    var today = todayDate();
+    if (dayDate <= today) return true;
+    var cursor = new Date(today);
+    while (cursor < dayDate){
+      if (!isPlanFullyCompletedForDate(cursor)) return false;
+      cursor = addDays(cursor, 1);
+    }
+    return true;
+  }
+
   // ---------- subject card builder (shared by setup + edit) ----------
   // container: DOM element to append to
   // prefill: {name,date,scope,hours,progress,difficulty,importance}
@@ -957,9 +980,10 @@
       if (selectedDateStr === info.dateStr) classes.push('selected');
 
       var html = '<div class="'+classes.join(' ')+'" data-date="'+info.dateStr+'" data-inrange="'+(info.inRange?'1':'0')+'">';
-      if (info.inRange && info.isToday && !info.hasCheckin){
-        html += '<button type="button" class="cal-check" data-quick-date="'+info.dateStr+'" aria-label="오늘 전체 완료 체크" title="오늘 전체 완료로 체크">☐</button>';
-      } else if (info.inRange && info.hasCheckin){
+      var editableDate = info.inRange && canEditDate(cellDate);
+      if (editableDate && !info.hasCheckin){
+        html += '<button type="button" class="cal-check" data-quick-date="'+info.dateStr+'" aria-label="이 날짜 전체 완료 체크" title="이 날짜 전체 완료로 체크">☐</button>';
+      } else if (editableDate && info.hasCheckin){
         html += '<button type="button" class="cal-check checked" data-quick-date="'+info.dateStr+'" aria-label="체크 해제" title="체크 해제">✓</button>';
       }
       if (info.examSubjects.length>0){
@@ -1007,7 +1031,7 @@
           var entry = {};
           Object.keys(alloc).forEach(function(id){ entry[id] = round1(alloc[id]); });
           state.historyByDate[dstr] = entry;
-          showToast('오늘 학습을 모두 완료로 체크했어요.');
+          showToast(parseISODate(dstr) > todayDate() ? '이 날짜의 학습을 모두 완료로 미리 체크했어요.' : '오늘 학습을 모두 완료로 체크했어요.');
         }
         await saveState();
         syncStudyStats();
@@ -1048,8 +1072,11 @@
       html += '<div class="detail-exam">🎯 시험일: ' + info.examSubjects.map(function(s){return escapeHtml(s.name);}).join(', ') + '</div>';
     }
 
-    if (info.isFuture){
-      html += '<div class="detail-note">아직 오지 않은 날이에요. 지금까지의 진행 상황을 바탕으로 예상한 권장 학습량이에요 (당일이 되면 값이 조금 달라질 수 있어요).</div>';
+    var editableDate = canEditDate(dayDate);
+    if (info.isFuture && editableDate){
+      html += '<div class="detail-note">앞선 날짜의 목표를 모두 끝내서 이 날의 공부를 미리 시작할 수 있어요. 공부했다면 완료 여부와 실제 학습 시간을 기록해두세요.</div>';
+    } else if (info.isFuture){
+      html += '<div class="detail-note">아직 잠겨 있는 날이에요. 앞선 날짜를 순서대로 모두 완료하면 하루씩 다음 계획이 열려요.</div>';
     } else if (todayFlag){
       html += '<div class="detail-note">오늘 배정된 학습량이에요. 실제로 공부한 시간을 입력하고 저장하면, 못한 만큼은 내일 이후로 자동 반영돼요.</div>';
     } else {
@@ -1065,7 +1092,7 @@
       return;
     }
 
-    var readOnly = info.isFuture;
+    var readOnly = info.isFuture && !editableDate;
     subjectIds.forEach(function(id){
       var subj = state.subjects.filter(function(x){ return x.id===id; })[0];
       if (!subj) return;
