@@ -1,0 +1,1182 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>디데이플랜 Calendar — 달력 체크인 + 부족 경고 + 설정 수정</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+  /* ===== Design tokens — from DESIGN.md (Apple-design-analysis) ===== */
+  :root{
+    --primary:#0066cc; --primary-focus:#0071e3; --primary-on-dark:#2997ff;
+    --ink:#1d1d1f; --body-on-dark:#ffffff; --body-muted:#cccccc;
+    --ink-muted-80:#333333; --ink-muted-48:#7a7a7a;
+    --divider-soft:#f0f0f0; --hairline:#e0e0e0;
+    --canvas:#ffffff; --canvas-parchment:#f5f5f7; --surface-pearl:#fafafc;
+    --surface-tile-1:#272729; --surface-tile-2:#2a2a2c; --surface-tile-3:#252527;
+    --surface-black:#000000; --surface-chip-translucent:#d2d2d7;
+    --on-primary:#ffffff; --on-dark:#ffffff;
+
+    --r-none:0px; --r-xs:5px; --r-sm:8px; --r-md:11px; --r-lg:18px; --r-pill:9999px;
+
+    --sp-xxs:4px; --sp-xs:8px; --sp-sm:12px; --sp-md:17px; --sp-lg:24px; --sp-xl:32px; --sp-xxl:48px; --sp-section:80px;
+
+    --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', system-ui, sans-serif;
+    --font-text: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', system-ui, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  @media (prefers-reduced-motion: reduce){ html{scroll-behavior:auto;} *{animation-duration:.001ms !important; transition-duration:.001ms !important;} }
+  body{ margin:0; background:var(--canvas-parchment); color:var(--ink); font-family:var(--font-text); line-height:1.47; -webkit-font-smoothing:antialiased;}
+  h1,h2,h3{ font-family:var(--font-display); margin:0; font-weight:600;}
+  button{font-family:inherit;}
+  [hidden]{ display:none !important; }
+
+  /* Apple never sets numbers in a monospace face — tabular figures inside the system font instead. */
+  .mono{ font-variant-numeric:tabular-nums; }
+
+  /* ===== typography scale (typography.*) ===== */
+  .t-hero{ font-family:var(--font-display); font-weight:600; font-size:56px; line-height:1.07; letter-spacing:-0.28px; }
+  .t-display-lg{ font-family:var(--font-display); font-weight:600; font-size:40px; line-height:1.10; letter-spacing:0; }
+  .t-tagline{ font-family:var(--font-display); font-weight:600; font-size:21px; line-height:1.19; letter-spacing:0.231px; }
+  .t-lead{ font-family:var(--font-display); font-weight:400; font-size:28px; line-height:1.14; letter-spacing:0.196px; }
+  .t-body-strong{ font-family:var(--font-text); font-weight:600; font-size:17px; line-height:1.24; letter-spacing:-0.374px; }
+  .t-body{ font-family:var(--font-text); font-weight:400; font-size:17px; line-height:1.47; letter-spacing:-0.374px; }
+  .t-caption-strong{ font-family:var(--font-text); font-weight:600; font-size:14px; line-height:1.29; letter-spacing:-0.224px; }
+  .t-caption{ font-family:var(--font-text); font-weight:400; font-size:14px; line-height:1.43; letter-spacing:-0.224px; }
+  .t-fine-print{ font-family:var(--font-text); font-weight:400; font-size:12px; line-height:1.0; letter-spacing:-0.12px; }
+  .t-nav-link{ font-family:var(--font-text); font-weight:400; font-size:12px; line-height:1.0; letter-spacing:-0.12px; }
+  @media (max-width:1068px){ .t-hero{ font-size:40px; line-height:1.10; letter-spacing:0; } }
+  @media (max-width:640px){ .t-hero{ font-size:34px; } }
+  @media (max-width:419px){ .t-hero{ font-size:28px; } }
+
+  /* ===== component.global-nav ===== */
+  .topbar{ position:sticky; top:0; z-index:20; background:var(--surface-black); height:44px; padding:0 24px; display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .topbar .brand{ font-family:var(--font-display); font-weight:600; font-size:15px; color:var(--body-on-dark); letter-spacing:-0.224px; }
+  .topbar .brand span{ color:var(--primary-on-dark); }
+  .topbar .actions{ display:flex; gap:8px; align-items:center; }
+  .ghost-btn{
+    background:transparent; border:1px solid rgba(255,255,255,0.28); color:var(--body-on-dark);
+    font-family:var(--font-text); font-weight:400; font-size:12px; letter-spacing:-0.12px;
+    border-radius:var(--r-pill); padding:6px 14px; cursor:pointer; transition:transform .1s ease, background .15s ease;
+  }
+  .ghost-btn:hover{ background:rgba(255,255,255,0.1); }
+  .ghost-btn:active{ transform:scale(0.95); }
+  .reset-btn.confirming{ background:var(--ink); border-color:var(--ink); color:#fff; }
+
+  /* ===== hero (product-tile-parchment treatment) ===== */
+  .hero{ background:var(--canvas-parchment); padding:56px 24px 40px; }
+  .hero-inner{ max-width:900px; margin:0 auto; }
+  .eyebrow{
+    display:inline-flex; align-items:center; gap:8px; font-family:var(--font-text); font-weight:600; font-size:14px;
+    letter-spacing:-0.224px; color:var(--ink-muted-80); background:var(--canvas); border:1px solid var(--hairline);
+    padding:5px 12px; border-radius:var(--r-pill); margin-bottom:18px;
+  }
+  .eyebrow::before{ content:"●"; font-size:8px; color:var(--primary); }
+  .hero h1{ font-size:40px; font-weight:600; line-height:1.10; letter-spacing:0; color:var(--ink); }
+  @media (max-width:1068px){ .hero h1{ font-size:40px; } }
+  @media (max-width:640px){ .hero h1{ font-size:34px; } }
+  @media (max-width:419px){ .hero h1{ font-size:28px; } }
+  .hero h1 span{ color:var(--primary); }
+  .hero p.lead{ margin-top:14px; max-width:600px; font-family:var(--font-text); font-weight:400; font-size:17px; line-height:1.47; letter-spacing:-0.374px; color:var(--ink-muted-80); }
+
+  main{ max-width:900px; margin:0 auto; padding:48px 24px 100px; }
+  .center-msg{ text-align:center; padding:80px 20px; color:var(--ink-muted-48); font-size:14px; }
+
+  .section-head{ margin-bottom:24px; }
+  .section-head .idx{ font-family:var(--font-text); font-weight:600; font-size:12px; letter-spacing:-0.12px; color:var(--ink-muted-48); text-transform:uppercase; }
+  .section-head h2{ font-size:28px; font-weight:600; letter-spacing:0.196px; margin-top:6px; color:var(--ink); }
+  .section-head p{ color:var(--ink-muted-80); font-size:17px; line-height:1.47; letter-spacing:-0.374px; margin-top:8px; }
+
+  /* ===== component.store-utility-card — subject cards ===== */
+  #subjectList, #editSubjectList{ display:flex; flex-direction:column; gap:16px; margin-bottom:16px; }
+  .subject-card{ position:relative; background:var(--canvas); border:1px solid var(--hairline); border-radius:var(--r-lg); padding:24px; }
+  .subject-card .remove-btn{
+    position:absolute; top:16px; right:16px; background:transparent; border:1px solid var(--hairline); border-radius:var(--r-sm);
+    width:28px; height:28px; color:var(--ink-muted-48); cursor:pointer; font-size:15px; display:flex; align-items:center; justify-content:center;
+    transition:transform .1s ease;
+  }
+  .subject-card .remove-btn:hover{ border-color:var(--ink-muted-48); color:var(--ink); }
+  .subject-card .remove-btn:active{ transform:scale(0.95); }
+  .field-grid{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .field-grid.full{ grid-template-columns:1fr; }
+  .field{ display:flex; flex-direction:column; gap:6px; margin-bottom:16px; }
+  .field label{ font-family:var(--font-text); font-size:14px; font-weight:600; letter-spacing:-0.224px; color:var(--ink-muted-80); }
+  .field input[type=text],.field input[type=date],.field input[type=number]{
+    border:1px solid rgba(0,0,0,0.08); border-radius:var(--r-sm); padding:10px 12px; font-size:15px;
+    font-family:var(--font-text); color:var(--ink); background:var(--canvas); width:100%;
+  }
+  .field input:focus-visible{ outline:2px solid var(--primary-focus); outline-offset:1px; border-color:transparent; }
+  .slider-field{ display:flex; flex-direction:column; gap:6px; margin-bottom:16px; }
+  .slider-field .slider-top{ display:flex; justify-content:space-between; align-items:baseline; }
+  .slider-field label{ font-family:var(--font-text); font-size:14px; font-weight:600; letter-spacing:-0.224px; color:var(--ink-muted-80); }
+  .slider-field .slider-val{ font-size:13px; color:var(--primary); font-weight:600; }
+  .slider-field input[type=range]{ width:100%; accent-color:var(--primary); }
+  .scale-labels{ display:flex; justify-content:space-between; font-size:12px; color:var(--ink-muted-48); }
+  .progress-preview{ font-size:13px; color:var(--ink-muted-80); margin-top:2px; }
+  .existing-note{ font-size:13px; line-height:1.43; color:var(--ink-muted-80); background:var(--surface-pearl); border:1px solid var(--divider-soft); border-radius:var(--r-sm); padding:10px 12px; margin-bottom:16px; }
+  .row-actions{ display:flex; gap:16px; align-items:center; margin:8px 0 24px; flex-wrap:wrap; }
+
+  /* ===== component.button-pearl-capsule style secondary action ===== */
+  .add-btn{
+    background:var(--surface-pearl); border:1px solid var(--divider-soft); border-radius:var(--r-pill);
+    padding:8px 16px; color:var(--ink-muted-80); font-family:var(--font-text); font-weight:400; font-size:14px; letter-spacing:-0.224px; cursor:pointer;
+    transition:transform .1s ease;
+  }
+  .add-btn:hover{ border-color:var(--ink-muted-48); }
+  .add-btn:active{ transform:scale(0.95); }
+
+  /* ===== component.text-link ===== */
+  .demo-link{ background:none; border:none; color:var(--primary); text-decoration:underline; font-size:14px; cursor:pointer; padding:4px; font-family:var(--font-text); }
+
+  .global-settings{ display:flex; gap:24px; flex-wrap:wrap; margin-bottom:24px; padding:20px; background:var(--canvas-parchment); border:1px solid var(--hairline); border-radius:var(--r-lg); }
+  .global-settings .field{ min-width:200px; margin-bottom:0; }
+  .global-settings .field input{ background:var(--canvas); }
+  .global-settings .readonly-field{ font-size:14px; color:var(--ink-muted-80); }
+  .global-settings .readonly-field b{ color:var(--ink); font-weight:600; }
+
+  /* ===== component.button-primary / button-secondary-pill ===== */
+  .primary-btn{
+    background:var(--primary); color:var(--on-primary); border:none; font-family:var(--font-text); font-weight:400; font-size:17px; letter-spacing:-0.374px;
+    padding:11px 22px; border-radius:var(--r-pill); cursor:pointer; transition:transform .1s ease, background .15s ease;
+  }
+  .primary-btn:hover{ background:var(--primary-focus); }
+  .primary-btn:active{ transform:scale(0.95); }
+  .secondary-btn{
+    background:transparent; color:var(--primary); border:1px solid var(--primary); font-family:var(--font-text); font-weight:400; font-size:17px; letter-spacing:-0.374px;
+    padding:11px 22px; border-radius:var(--r-pill); cursor:pointer; transition:transform .1s ease;
+  }
+  .secondary-btn:active{ transform:scale(0.95); }
+  .btn-row{ display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+  .error-text{ color:var(--ink); font-weight:600; font-size:14px; margin-top:12px; }
+  .error-text::before{ content:"⚠ "; }
+
+  .banner{ border-radius:var(--r-lg); padding:14px 18px; font-size:14px; line-height:1.43; letter-spacing:-0.224px; margin-bottom:20px; background:var(--canvas-parchment); border:1px solid var(--hairline); color:var(--ink-muted-80); }
+  .banner.warn{ color:var(--ink); font-weight:600; }
+  .banner.ok{ color:var(--ink-muted-80); }
+  .banner b{ font-weight:600; color:var(--ink); }
+  .banner .banner-action{ margin-left:6px; text-decoration:underline; cursor:pointer; font-weight:600; color:var(--primary); }
+
+  /* ===== calendar view ===== */
+  .dday-banner{ display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; background:var(--surface-tile-1); color:var(--body-on-dark); border-radius:var(--r-lg); padding:20px 24px; margin-bottom:20px; }
+  .dday-banner .date{ font-size:13px; letter-spacing:-0.12px; color:var(--body-muted); }
+  .dday-banner .dday-num{ font-size:26px; font-weight:600; color:var(--primary-on-dark); margin-top:2px; }
+
+  .legend{ display:flex; flex-wrap:wrap; gap:10px 18px; margin-bottom:18px; font-size:14px; color:var(--ink-muted-80); }
+  .legend span{ display:inline-flex; align-items:center; gap:7px; }
+  .legend .dot{ width:9px; height:9px; border-radius:var(--r-pill); }
+
+  .month-nav{ display:flex; align-items:center; justify-content:center; gap:20px; margin-bottom:16px; }
+  .month-nav button{
+    background:var(--canvas); border:1px solid var(--hairline); border-radius:var(--r-sm); width:32px; height:32px; cursor:pointer;
+    font-size:15px; color:var(--ink-muted-80); transition:transform .1s ease;
+  }
+  .month-nav button:active{ transform:scale(0.95); }
+  .month-nav button:disabled{ opacity:.3; cursor:not-allowed; }
+  .month-nav .month-label{ font-family:var(--font-display); font-weight:600; font-size:17px; min-width:130px; text-align:center; color:var(--ink); }
+
+  .cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:6px; }
+  .cal-weekday{ text-align:center; font-size:12px; font-weight:600; color:var(--ink-muted-48); padding-bottom:6px; }
+  .cal-cell{ position:relative; min-height:76px; background:var(--canvas); border:1px solid var(--hairline); border-radius:var(--r-sm); padding:6px; cursor:pointer; display:flex; flex-direction:column; transition:border-color .12s ease; }
+  .cal-cell:hover{ border-color:var(--ink-muted-48); }
+  .cal-cell.out-range{ background:transparent; border-color:transparent; cursor:default; }
+  .cal-cell.out-range:hover{ border-color:transparent; }
+  .cal-cell.dim .cal-date{ opacity:.4; }
+  .cal-cell.dim .cal-hours{ opacity:.4; }
+  .cal-cell.today{ border:2px solid var(--primary); }
+  .cal-cell.exam{ border-color:var(--ink); }
+  .cal-cell.selected{ outline:2px solid var(--ink); outline-offset:1px; }
+  .cal-date{ font-size:12px; font-weight:600; color:var(--ink); }
+  .cal-exam-tag{ position:absolute; top:3px; right:3px; background:var(--ink); color:var(--on-dark); font-size:8px; font-weight:600; padding:2px 5px; border-radius:var(--r-pill); max-width:60%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .cal-hours{ font-weight:600; font-size:13px; color:var(--ink); margin-top:16px; }
+  .cal-hours.future{ color:var(--ink-muted-48); font-weight:400; }
+  .cal-hours.zero{ color:var(--ink-muted-48); font-weight:400; }
+  .cal-dots{ display:flex; gap:3px; flex-wrap:wrap; margin-top:auto; padding-top:4px; }
+  .cal-dots span{ width:6px; height:6px; border-radius:var(--r-pill); }
+  .cal-status{ position:absolute; bottom:3px; right:4px; font-size:12px; font-weight:700; line-height:1; }
+  .cal-status.done{ color:var(--ink); }
+  .cal-status.partial{ color:var(--ink-muted-80); }
+  .cal-status.zero{ color:var(--ink-muted-48); }
+  .cal-status.unreviewed{ color:var(--ink-muted-48); font-weight:400; }
+  .cal-check{
+    position:absolute; top:3px; left:3px; width:18px; height:18px; border-radius:var(--r-xs); border:1.5px solid var(--primary);
+    background:var(--canvas); display:flex; align-items:center; justify-content:center; font-size:11px; color:var(--primary); cursor:pointer; z-index:2; font-weight:700;
+  }
+  .cal-check.checked{ background:var(--primary); color:var(--on-primary); border-color:var(--primary); }
+
+  /* ===== detail panel ===== */
+  .detail-panel{ margin-top:24px; background:var(--canvas); border:1px solid var(--hairline); border-radius:var(--r-lg); padding:24px; }
+  .detail-head{ display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:6px; }
+  .detail-head .d-title{ font-weight:600; font-size:17px; letter-spacing:-0.374px; color:var(--ink); }
+  .detail-head .d-dday{ font-size:13px; color:var(--ink-muted-80); }
+  .detail-note{ font-size:14px; line-height:1.43; color:var(--ink-muted-80); margin-bottom:16px; }
+  .detail-exam{ background:var(--ink); color:var(--on-dark); border-radius:var(--r-sm); padding:12px 16px; font-weight:600; font-size:14px; margin-bottom:16px; }
+  .ci-card{ background:var(--surface-pearl); border:1px solid var(--divider-soft); border-radius:var(--r-sm); padding:14px 16px; margin-bottom:10px; }
+  .ci-head{ display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; }
+  .ci-name{ font-weight:600; font-size:15px; letter-spacing:-0.224px; display:flex; align-items:center; gap:8px; color:var(--ink); }
+  .ci-dot{ width:9px; height:9px; border-radius:var(--r-pill); display:inline-block; }
+  .ci-plan{ font-size:13px; color:var(--ink-muted-80); }
+  .ci-controls{ display:flex; align-items:center; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  .quick-btn{
+    border:1px solid var(--divider-soft); background:var(--canvas); border-radius:var(--r-pill); padding:6px 14px; font-size:13px; font-weight:400;
+    color:var(--ink-muted-80); cursor:pointer; transition:transform .1s ease;
+  }
+  .quick-btn:hover{ border-color:var(--ink-muted-48); color:var(--ink); }
+  .quick-btn:active{ transform:scale(0.95); }
+  .ci-controls input[type=number]{ width:72px; border:1px solid rgba(0,0,0,0.08); border-radius:var(--r-sm); padding:7px 9px; font-size:14px; }
+  .ci-status{ margin-left:auto; font-size:12px; font-weight:600; padding:3px 10px; border-radius:var(--r-pill); background:var(--canvas-parchment); color:var(--ink-muted-80); }
+  .ci-status.full{ color:var(--ink); font-weight:700; }
+  .ci-status.partial{ color:var(--ink-muted-80); }
+  .ci-status.none{ color:var(--ink-muted-48); }
+  .detail-empty{ font-size:14px; color:var(--ink-muted-48); font-style:italic; padding:8px 0; }
+  .detail-save-row{ margin-top:16px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  .save-hint{ font-size:12px; color:var(--ink-muted-48); }
+
+  /* ===== leaderboard (다른 이용자 현황) ===== */
+  .leaderboard-panel{ margin-top:24px; }
+  .lb-title{ font-family:var(--font-text); font-weight:600; font-size:14px; letter-spacing:-0.224px; color:var(--ink-muted-80); margin-bottom:10px; }
+  .lb-row{ display:flex; align-items:center; gap:12px; background:var(--canvas); border:1px solid var(--hairline); border-radius:var(--r-sm); padding:10px 14px; margin-bottom:8px; font-size:13px; color:var(--ink-muted-80); }
+  .lb-rank{ font-family:var(--font-display); font-weight:600; font-size:13px; color:var(--primary); width:20px; flex-shrink:0; }
+  .lb-metric{ flex:1; }
+
+  /* ===== toast ===== */
+  .toast{
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:var(--ink); color:var(--on-dark);
+    padding:12px 20px; border-radius:var(--r-pill); font-size:14px; font-weight:600; z-index:50; opacity:0;
+    transition:opacity .3s ease; pointer-events:none;
+  }
+  .toast.show{ opacity:1; }
+
+  /* ===== component.footer ===== */
+  footer{ text-align:center; padding:32px 24px; color:var(--ink-muted-48); font-size:12px; background:var(--canvas-parchment); border-top:1px solid var(--hairline); }
+
+  @media (max-width:640px){
+    .field-grid{ grid-template-columns:1fr; }
+    .cal-cell{ min-height:64px; padding:4px; }
+    .cal-hours{ font-size:11.5px; margin-top:13px; }
+    .cal-grid{ gap:4px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">디데이플랜 <span>Calendar</span></div>
+  <div class="actions">
+    <button class="ghost-btn" id="editSettingsBtn" hidden>설정 수정</button>
+    <button class="ghost-btn reset-btn" id="resetBtn" hidden>처음부터 다시 설정</button>
+  </div>
+</div>
+
+<header class="hero">
+  <div class="hero-inner">
+    <div class="eyebrow">달력 체크인 · 부족 경고 · 설정 수정</div>
+    <h1>오늘 칸에 <span>체크</span>만 하면 끝</h1>
+    <p class="lead">달력의 각 날짜에 그날 권장 학습량이 바로 표시돼요. 시간이 부족할 것 같으면 미리 알려주고, 시험 일정이 바뀌면 언제든 설정을 다시 고칠 수 있어요.</p>
+  </div>
+</header>
+
+<main>
+  <div id="loadingView" class="center-msg">불러오는 중…</div>
+
+  <!-- ================= SETUP VIEW ================= -->
+  <div id="setupView" hidden>
+    <section>
+      <div class="section-head">
+        <div class="idx">01 · 02 · 03 / Input</div>
+        <h2>시험 정보 + 개인 상태 + 공부 가능 시간</h2>
+        <p>과목마다 시험일·범위와 난이도·중요도·현재 진행도를 입력하세요.</p>
+      </div>
+      <div id="subjectList"></div>
+      <div class="row-actions">
+        <button class="add-btn" id="addSubjectBtn" type="button">+ 과목 추가</button>
+        <button class="demo-link" id="demoBtn" type="button">예시 데이터로 체험하기</button>
+      </div>
+      <div class="global-settings">
+        <div class="field"><label for="startDate">계획 시작일</label><input type="date" id="startDate"></div>
+        <div class="field"><label for="dailyHours">하루 평균 공부 가능 시간 (시간)</label><input type="number" id="dailyHours" min="0" step="0.5" placeholder="예: 4"></div>
+      </div>
+      <button class="primary-btn" id="startPlanBtn" type="button">달력으로 계획 만들기</button>
+      <div class="error-text" id="errorText" style="display:none;"></div>
+    </section>
+  </div>
+
+  <!-- ================= CALENDAR VIEW ================= -->
+  <div id="calendarView" hidden>
+    <div class="dday-banner">
+      <div><div class="date mono" id="ddayDateLabel">-</div><div class="dday-num mono" id="ddayNumLabel">D-?</div></div>
+      <div class="mono" id="finishedBadge" style="color:var(--primary-on-dark); font-size:13px; font-weight:600;" hidden>🎉 모든 시험 종료</div>
+    </div>
+
+    <div id="feasibilityBanner"></div>
+
+    <div class="legend" id="legend"></div>
+
+    <div class="month-nav">
+      <button type="button" id="prevMonthBtn" aria-label="이전 달">‹</button>
+      <div class="month-label" id="monthLabel">-</div>
+      <button type="button" id="nextMonthBtn" aria-label="다음 달">›</button>
+    </div>
+
+    <div class="cal-weekday-row cal-grid" style="margin-bottom:2px;">
+      <div class="cal-weekday">일</div><div class="cal-weekday">월</div><div class="cal-weekday">화</div>
+      <div class="cal-weekday">수</div><div class="cal-weekday">목</div><div class="cal-weekday">금</div><div class="cal-weekday">토</div>
+    </div>
+    <div class="cal-grid" id="calGrid"></div>
+
+    <div class="detail-panel" id="detailPanel"></div>
+
+    <div class="leaderboard-panel" id="leaderboardPanel"></div>
+  </div>
+
+  <!-- ================= EDIT SETTINGS VIEW ================= -->
+  <div id="editView" hidden>
+    <section>
+      <div class="section-head">
+        <div class="idx">Edit</div>
+        <h2>과목 / 공부 시간 설정 수정</h2>
+        <p>기존 과목의 시험일·범위·필요 시간·난이도·중요도를 고치거나, 새 과목을 추가/삭제할 수 있어요. 지금까지 체크한 기록은 그대로 남아요.</p>
+      </div>
+      <div id="editSubjectList"></div>
+      <div class="row-actions">
+        <button class="add-btn" id="addEditSubjectBtn" type="button">+ 새 과목 추가</button>
+      </div>
+      <div class="global-settings">
+        <div class="field readonly-field">계획 시작일<br><b id="editStartDateLabel">-</b> (변경 불가)</div>
+        <div class="field"><label for="editDailyHours">하루 평균 공부 가능 시간 (시간)</label><input type="number" id="editDailyHours" min="0" step="0.5"></div>
+      </div>
+      <div class="btn-row">
+        <button class="primary-btn" id="saveEditBtn" type="button">저장하고 달력으로 돌아가기</button>
+        <button class="secondary-btn" id="cancelEditBtn" type="button">취소</button>
+      </div>
+      <div class="error-text" id="editErrorText" style="display:none;"></div>
+    </section>
+  </div>
+</main>
+
+<footer>디데이플랜 Calendar · 계획은 이 브라우저(계정)에 저장되어 다음에 다시 열어도 이어할 수 있어요. 저장이 지원되지 않는 환경에서는 새로고침 시 초기화될 수 있어요.</footer>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  var STORAGE_KEY = 'ddayplan_calendar_state_v2';
+  var PALETTE = ['rgba(29,29,31,0.92)','rgba(0,102,204,0.85)','rgba(29,29,31,0.55)','rgba(0,102,204,0.45)','rgba(29,29,31,0.30)','rgba(0,102,204,0.25)'];
+  var WEEKDAY = ['일','월','화','수','목','금','토'];
+  var MONTHNAMES = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+  var DIFFICULTY_LABELS = ['매우 쉬움','쉬움','보통','어려움','매우 어려움'];
+  var IMPORTANCE_LABELS = ['낮음','다소 낮음','보통','높음','매우 높음'];
+
+  var state = null;
+  var isBusy = false;
+  var viewYear, viewMonth;
+  var selectedDateStr = null;
+
+  // ---------- helpers ----------
+  function pad(n){ return n < 10 ? '0'+n : ''+n; }
+  function toISODate(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+  function parseISODate(s){ return new Date(s + 'T00:00:00'); }
+  function todayDate(){ var d = new Date(); d.setHours(0,0,0,0); return d; }
+  function addDays(d, n){ var r = new Date(d); r.setDate(r.getDate()+n); return r; }
+  function daysBetween(a,b){ return Math.round((b-a)/86400000); }
+  function sameDate(a,b){ return daysBetween(a,b) === 0; }
+  function round1(n){ return Math.round(n*10)/10; }
+  function escapeHtml(str){ return String(str).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function genSubjectId(){ return 's_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+  function showView(name){
+    ['loadingView','setupView','calendarView','editView'].forEach(function(id){ document.getElementById(id).hidden = (id !== name); });
+    document.getElementById('resetBtn').hidden = (name !== 'calendarView');
+    document.getElementById('editSettingsBtn').hidden = (name !== 'calendarView');
+  }
+  function showToast(msg){
+    var t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(function(){ t.classList.remove('show'); }, 2400);
+  }
+
+  // ---------- storage ----------
+  async function saveState(){
+    try{ if (window.storage) await window.storage.set(STORAGE_KEY, JSON.stringify(state), false); }
+    catch(e){ console.warn('저장 실패, 이 세션에서만 유지됩니다.', e); }
+  }
+  async function loadStoredState(){
+    try{
+      if (window.storage){
+        var res = await window.storage.get(STORAGE_KEY, false);
+        if (res && res.value) return JSON.parse(res.value);
+      }
+    }catch(e){ /* 저장된 값 없음 */ }
+    return null;
+  }
+  async function clearStoredState(){ try{ if (window.storage) await window.storage.delete(STORAGE_KEY, false); }catch(e){} }
+
+  // ---------- analytics (Supabase) ----------
+  // 하루 평균 공부시간 / 공부 진행률 / 시험까지 남은 기간 평균을 기기 하나당 한 행으로
+  // study_stats 테이블에 저장(upsert)합니다. 다른 이용자 현황 패널에서 이 표를 그대로
+  // 읽어와 동기부여용으로 보여줍니다.
+  var SUPABASE_URL = 'https://gxyctacjrvuxudxukksi.supabase.co';
+  var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd4eWN0YWNqcnZ1eHVkeHVra3NpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcxMjY4MDksImV4cCI6MjEwMjcwMjgwOX0.V7m7NLjZ4C-qLNk7-ETjO0Vk8VkOT0HwpsZDtvC7Sg8';
+  var supabaseClient = (SUPABASE_URL.indexOf('YOUR_') !== 0 && window.supabase)
+    ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+    : null;
+
+  function getDeviceId(){
+    try{
+      var id = localStorage.getItem('ddayplan_device_id');
+      if (!id){
+        id = (crypto.randomUUID ? crypto.randomUUID() : 'd_' + Date.now().toString(36) + Math.random().toString(36).slice(2));
+        localStorage.setItem('ddayplan_device_id', id);
+      }
+      return id;
+    }catch(e){ return 'anon'; }
+  }
+
+  function computeOverallProgressRate(){
+    if (!state.subjects.length) return 0;
+    var needed = 0, done = 0;
+    state.subjects.forEach(function(s){
+      needed += s.totalHours;
+      done += s.totalHours * (s.initialProgress/100) + totalUsedAllTime(s);
+    });
+    return needed > 0 ? round1(Math.min(100, done/needed*100)) : 0;
+  }
+
+  // 계획 시작일부터 오늘까지(달력일 기준)의 실제 학습시간 합 ÷ 경과일수.
+  function computeAvgDailyHours(){
+    var totalActual = 0;
+    var hist = state.historyByDate;
+    for (var dstr in hist){
+      if (!hist.hasOwnProperty(dstr)) continue;
+      var day = hist[dstr];
+      for (var id in day){ if (day.hasOwnProperty(id) && typeof day[id]==='number') totalActual += day[id]; }
+    }
+    var elapsedDays = Math.max(1, daysBetween(startDateObj(), todayDate()) + 1);
+    return round1(totalActual / elapsedDays);
+  }
+
+  // 과목별 (시험일 − 계획 시작일)의 평균 = "시험 기간과 디데이플랜 실행 날짜의 차이" 평균.
+  function computeAvgDaysBeforeExam(){
+    if (!state.subjects.length) return 0;
+    var startD = startDateObj();
+    var total = state.subjects.reduce(function(sum, s){ return sum + daysBetween(startD, parseISODate(s.examDate)); }, 0);
+    return round1(total / state.subjects.length);
+  }
+
+  function syncStudyStats(){
+    if (!supabaseClient) return;
+    supabaseClient.from('study_stats').upsert({
+      device_id: getDeviceId(),
+      avg_daily_hours: computeAvgDailyHours(),
+      progress_rate: computeOverallProgressRate(),
+      avg_days_before_exam: computeAvgDaysBeforeExam(),
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'device_id' }).then(function(res){
+      if (res.error) console.warn('analytics(study_stats) failed', res.error);
+    });
+  }
+
+  // ---------- 다른 이용자 현황 (동기부여 패널) ----------
+  function renderLeaderboard(rows){
+    var el = document.getElementById('leaderboardPanel');
+    if (!el) return;
+    if (!rows || rows.length === 0){ el.innerHTML = ''; return; }
+    var items = rows.map(function(r, i){
+      var hours = (typeof r.avg_daily_hours === 'number') ? r.avg_daily_hours.toFixed(1) : '0.0';
+      var progress = (typeof r.progress_rate === 'number') ? Math.round(r.progress_rate) : 0;
+      var gap = (typeof r.avg_days_before_exam === 'number') ? Math.round(r.avg_days_before_exam) : 0;
+      return '<div class="lb-row"><span class="lb-rank">'+(i+1)+'</span>' +
+        '<span class="lb-metric">하루 '+hours+'h</span>' +
+        '<span class="lb-metric">진행률 '+progress+'%</span>' +
+        '<span class="lb-metric">시험 D-'+gap+' 전 시작</span></div>';
+    }).join('');
+    el.innerHTML = '<div class="lb-title">🔥 다른 이용자들의 학습 현황</div>' + items;
+  }
+
+  function loadLeaderboard(){
+    if (!supabaseClient) return;
+    supabaseClient.from('study_stats')
+      .select('avg_daily_hours,progress_rate,avg_days_before_exam')
+      .order('progress_rate', { ascending: false })
+      .limit(10)
+      .then(function(res){
+        if (res.error){ console.warn('leaderboard load failed', res.error); return; }
+        renderLeaderboard(res.data);
+      });
+  }
+
+  // ---------- derived engine (pure: always recomputed from subjects + historyByDate) ----------
+  function usedHoursBefore(subject, dateExclusive){
+    var used = 0; var hist = state.historyByDate;
+    for (var dstr in hist){
+      if (!hist.hasOwnProperty(dstr)) continue;
+      if (parseISODate(dstr) < dateExclusive){
+        var v = hist[dstr][subject.id];
+        if (typeof v === 'number' && v > 0) used += v;
+      }
+    }
+    return used;
+  }
+  function totalUsedAllTime(subject){
+    var used = 0; var hist = state.historyByDate;
+    for (var dstr in hist){
+      if (!hist.hasOwnProperty(dstr)) continue;
+      var v = hist[dstr][subject.id];
+      if (typeof v === 'number' && v > 0) used += v;
+    }
+    return used;
+  }
+  function remainingAsOf(subject, dateExclusive){
+    var base = subject.totalHours * (1 - subject.initialProgress/100);
+    return Math.max(0, base - usedHoursBefore(subject, dateExclusive));
+  }
+  // Each active subject's "urgency" today = (remaining hours ÷ days left) × priority factor.
+  // Splitting the day's budget in plain proportion to urgency barely changes day to day (the
+  // math mostly cancels out), which is why the calendar looked repetitive. Squaring the urgency
+  // before splitting makes the single most urgent subject take a clearly larger share of today's
+  // budget; as that subject's remaining hours drop, its urgency drops too, so a different subject
+  // naturally becomes "today's focus" a few days later — producing a visibly rotating, day-to-day
+  // varying plan instead of a flat even split, while still capping every subject at what it
+  // actually still needs.
+  function allocateForDay(subjectsSnap, dayDate, dailyHours){
+    var active = subjectsSnap.filter(function(s){ return s.remainingHours > 1e-9 && parseISODate(s.examDate) > dayDate; });
+    var allocMap = {};
+    if (active.length === 0) return allocMap;
+    var pool = active.map(function(s){
+      return { id:s.id, daysLeft: Math.max(1, daysBetween(dayDate, parseISODate(s.examDate))), priorityFactor: (s.difficulty/3)*(s.importance/3) };
+    });
+    var budget = dailyHours, capped = {}, guard = 0;
+    while (budget > 1e-9 && guard < 60){
+      guard += 1;
+      var open = pool.filter(function(p){ return !capped[p.id]; });
+      if (open.length === 0) break;
+      var weights = open.map(function(p){
+        var s = active.filter(function(x){ return x.id===p.id; })[0];
+        var urgency = (s.remainingHours / p.daysLeft) * p.priorityFactor;
+        return urgency * urgency;
+      });
+      var totalW = weights.reduce(function(a,b){ return a+b; }, 0);
+      if (totalW <= 1e-9) break;
+      var allocatedRound = 0, newlyCapped = [];
+      for (var i=0;i<open.length;i++){
+        var p = open[i];
+        var s = active.filter(function(x){ return x.id===p.id; })[0];
+        var share = budget * (weights[i]/totalW);
+        var already = allocMap[p.id] || 0;
+        var maxAdd = s.remainingHours - already;
+        var add = Math.min(share, maxAdd);
+        if (add < share - 1e-9) newlyCapped.push(p.id);
+        allocMap[p.id] = already + add;
+        allocatedRound += add;
+      }
+      budget -= allocatedRound;
+      if (newlyCapped.length === 0) break;
+      newlyCapped.forEach(function(id){ capped[id] = true; });
+    }
+    return allocMap;
+  }
+  function snapshotAsOf(dateExclusive){
+    return state.subjects.map(function(s){ return Object.assign({}, s, { remainingHours: remainingAsOf(s, dateExclusive) }); });
+  }
+  function recommendedForDay(dayDate){ return allocateForDay(snapshotAsOf(dayDate), dayDate, state.dailyHours); }
+  function horizonEndDate(){
+    return state.subjects.reduce(function(max, s){ var ed = parseISODate(s.examDate); return ed > max ? ed : max; }, parseISODate(state.subjects[0].examDate));
+  }
+  function startDateObj(){ return parseISODate(state.startDate); }
+  function buildForecastMap(){
+    var today = todayDate();
+    var snap = snapshotAsOf(today);
+    var map = {};
+    var hEnd = horizonEndDate();
+    for (var d = addDays(today,1); d <= hEnd; d = addDays(d,1)){
+      var allocMap = allocateForDay(snap, d, state.dailyHours);
+      map[toISODate(d)] = allocMap;
+      Object.keys(allocMap).forEach(function(id){
+        var s = snap.filter(function(x){ return x.id===id; })[0];
+        s.remainingHours -= allocMap[id];
+      });
+    }
+    return map;
+  }
+  // simulates today -> horizon assuming every day's recommendation is fully completed;
+  // whatever remains per subject right after its own exam date is a genuine shortfall.
+  function computeShortfalls(){
+    var today = todayDate();
+    var snap = snapshotAsOf(today);
+    var hEnd = horizonEndDate();
+    for (var d = new Date(today); d <= hEnd; d = addDays(d,1)){
+      var allocMap = allocateForDay(snap, d, state.dailyHours);
+      Object.keys(allocMap).forEach(function(id){
+        var s = snap.filter(function(x){ return x.id===id; })[0];
+        s.remainingHours -= allocMap[id];
+      });
+    }
+    return snap
+      .filter(function(s){ return s.remainingHours > 0.05; })
+      .map(function(s){ return { id:s.id, name:s.name, color:s.color, shortfall: s.remainingHours }; });
+  }
+
+  // ---------- subject card builder (shared by setup + edit) ----------
+  // container: DOM element to append to
+  // prefill: {name,date,scope,hours,progress,difficulty,importance}
+  // opts.existing: true if editing an already-created subject (hides progress slider, shows history summary)
+  // opts.existingId/existingColor/existingProgress: preserved identity for existing subjects
+  function createSubjectCard(container, prefill, opts){
+    opts = opts || {};
+    var color = opts.existing ? opts.existingColor : PALETTE[container.children.length % PALETTE.length];
+    var card = document.createElement('div');
+    card.className = 'subject-card';
+    card.dataset.color = color;
+    card.style.borderLeftColor = color;
+    if (opts.existing){
+      card.dataset.existing = '1';
+      card.dataset.existingId = opts.existingId;
+      card.dataset.existingProgress = opts.existingProgress;
+    }
+
+    var progressBlockHtml;
+    if (opts.existing){
+      var usedSoFar = round1(totalUsedAllTime({ id: opts.existingId }));
+      var remainNow = round1(remainingAsOf({ id: opts.existingId, totalHours: prefill.hours, initialProgress: opts.existingProgress }, addDays(todayDate(),1)));
+      progressBlockHtml = '<div class="existing-note">지금까지 실제 학습: <b>'+usedSoFar.toFixed(1)+'h</b> · 현재 기준 남은 학습량: <b>'+remainNow.toFixed(1)+'h</b><br>전체 필요 시간을 바꾸면 남은 학습량도 자동으로 다시 계산돼요.</div>';
+    } else {
+      progressBlockHtml =
+        '<div class="slider-field"><div class="slider-top"><label>현재 학습 진행도</label><span class="slider-val f-progress-val">0%</span></div>' +
+        '<input type="range" min="0" max="100" step="5" value="0" class="f-progress">' +
+        '<div class="progress-preview mono f-progress-preview">남은 학습량: -</div></div>';
+    }
+
+    card.innerHTML =
+      '<button type="button" class="remove-btn" aria-label="과목 삭제">×</button>' +
+      '<div class="field-grid">' +
+        '<div class="field"><label>과목명</label><input type="text" class="f-name" placeholder="예: 수학"></div>' +
+        '<div class="field"><label>시험 날짜</label><input type="date" class="f-date"></div>' +
+      '</div>' +
+      '<div class="field-grid full"><div class="field"><label>시험 범위</label><input type="text" class="f-scope" placeholder="예: 3~6단원"></div></div>' +
+      '<div class="field-grid"><div class="field"><label>전체 범위 예상 필요 시간(h)</label><input type="number" min="0" step="0.5" class="f-hours" placeholder="예: 12"></div><div></div></div>' +
+      progressBlockHtml +
+      '<div class="field-grid">' +
+        '<div class="slider-field"><div class="slider-top"><label>난이도</label><span class="slider-val f-diff-val">보통 (3)</span></div><input type="range" min="1" max="5" step="1" value="3" class="f-difficulty"><div class="scale-labels"><span>쉬움</span><span>어려움</span></div></div>' +
+        '<div class="slider-field"><div class="slider-top"><label>중요도</label><span class="slider-val f-imp-val">보통 (3)</span></div><input type="range" min="1" max="5" step="1" value="3" class="f-importance"><div class="scale-labels"><span>낮음</span><span>매우높음</span></div></div>' +
+      '</div>';
+    container.appendChild(card);
+
+    var hoursInput = card.querySelector('.f-hours');
+    var diffInput = card.querySelector('.f-difficulty');
+    var diffVal = card.querySelector('.f-diff-val');
+    var impInput = card.querySelector('.f-importance');
+    var impVal = card.querySelector('.f-imp-val');
+
+    if (!opts.existing){
+      var progressInput = card.querySelector('.f-progress');
+      var progressVal = card.querySelector('.f-progress-val');
+      var progressPreview = card.querySelector('.f-progress-preview');
+      function updatePreview(){
+        var total = parseFloat(hoursInput.value); var prog = parseFloat(progressInput.value);
+        progressVal.textContent = prog + '%';
+        progressPreview.textContent = (!isNaN(total) && total>0) ? '남은 학습량: ' + (total*(1-prog/100)).toFixed(1) + 'h' : '남은 학습량: -';
+      }
+      hoursInput.addEventListener('input', updatePreview);
+      progressInput.addEventListener('input', updatePreview);
+      if (prefill && prefill.progress != null) progressInput.value = prefill.progress;
+      updatePreview();
+    }
+
+    diffInput.addEventListener('input', function(){ diffVal.textContent = DIFFICULTY_LABELS[diffInput.value-1] + ' (' + diffInput.value + ')'; });
+    impInput.addEventListener('input', function(){ impVal.textContent = IMPORTANCE_LABELS[impInput.value-1] + ' (' + impInput.value + ')'; });
+    card.querySelector('.remove-btn').addEventListener('click', function(){
+      if (container.children.length <= 1) return;
+      card.remove();
+    });
+
+    if (prefill){
+      card.querySelector('.f-name').value = prefill.name || '';
+      card.querySelector('.f-date').value = prefill.date || '';
+      card.querySelector('.f-scope').value = prefill.scope || '';
+      hoursInput.value = prefill.hours != null ? prefill.hours : '';
+      diffInput.value = prefill.difficulty || 3;
+      impInput.value = prefill.importance || 3;
+      diffVal.textContent = DIFFICULTY_LABELS[diffInput.value-1] + ' (' + diffInput.value + ')';
+      impVal.textContent = IMPORTANCE_LABELS[impInput.value-1] + ' (' + impInput.value + ')';
+    }
+    return card;
+  }
+
+  function readSubjectsFromContainer(container, todayISOMin){
+    var cards = Array.prototype.slice.call(container.querySelectorAll('.subject-card'));
+    var subjects = [], errors = [];
+    cards.forEach(function(card, idx){
+      var name = card.querySelector('.f-name').value.trim();
+      var dateStr = card.querySelector('.f-date').value;
+      var scope = card.querySelector('.f-scope').value.trim();
+      var hoursStr = card.querySelector('.f-hours').value;
+      var difficulty = parseInt(card.querySelector('.f-difficulty').value, 10);
+      var importance = parseInt(card.querySelector('.f-importance').value, 10);
+      if (!name || !dateStr || !hoursStr){ errors.push((idx+1)+'번째 과목: 과목명, 시험 날짜, 예상 필요 시간을 모두 입력해주세요.'); return; }
+      var totalHours = parseFloat(hoursStr);
+      if (isNaN(totalHours) || totalHours <= 0){ errors.push((idx+1)+'번째 과목: 예상 필요 시간은 0보다 커야 합니다.'); return; }
+      if (todayISOMin && dateStr < todayISOMin){ errors.push((idx+1)+'번째 과목: 시험 날짜가 이미 지났어요.'); return; }
+
+      var isExisting = card.dataset.existing === '1';
+      var id = isExisting ? card.dataset.existingId : genSubjectId();
+      var initialProgress = isExisting ? parseFloat(card.dataset.existingProgress) : (function(){
+        var p = parseFloat(card.querySelector('.f-progress').value); return isNaN(p) ? 0 : p;
+      })();
+
+      subjects.push({ id: id, name: name, examDate: dateStr, scope: scope, totalHours: totalHours,
+        initialProgress: initialProgress, difficulty: difficulty, importance: importance, color: card.dataset.color });
+    });
+    return { subjects: subjects, errors: errors };
+  }
+
+  // ---------- setup view ----------
+  var subjectListEl = document.getElementById('subjectList');
+  var errorTextEl = document.getElementById('errorText');
+
+  document.getElementById('addSubjectBtn').addEventListener('click', function(){ createSubjectCard(subjectListEl, null, {}); });
+  document.getElementById('demoBtn').addEventListener('click', function(){
+    subjectListEl.innerHTML = '';
+    var t = todayDate();
+    createSubjectCard(subjectListEl, { name:'수학', date: toISODate(addDays(t,6)), scope:'3~6단원 (함수, 수열)', hours:14, progress:10, difficulty:5, importance:5 }, {});
+    createSubjectCard(subjectListEl, { name:'영어', date: toISODate(addDays(t,8)), scope:'교과서 4~7과 + 단어장', hours:9, progress:50, difficulty:2, importance:3 }, {});
+    createSubjectCard(subjectListEl, { name:'한국사', date: toISODate(addDays(t,10)), scope:'근현대사 전 범위', hours:7, progress:20, difficulty:3, importance:4 }, {});
+    document.getElementById('dailyHours').value = 4;
+  });
+
+  function initSetupForm(){
+    subjectListEl.innerHTML = '';
+    createSubjectCard(subjectListEl, null, {});
+    var startDateInput = document.getElementById('startDate');
+    var todayISO = toISODate(todayDate());
+    startDateInput.value = todayISO; startDateInput.min = todayISO;
+    errorTextEl.style.display = 'none';
+  }
+
+  document.getElementById('startPlanBtn').addEventListener('click', async function(){
+    if (isBusy) return;
+    errorTextEl.style.display = 'none';
+    var startStr = document.getElementById('startDate').value;
+    var dailyHoursVal = parseFloat(document.getElementById('dailyHours').value);
+    var parsed = readSubjectsFromContainer(subjectListEl, null);
+    var errors = parsed.errors;
+    if (!startStr) errors.push('계획 시작일을 선택해주세요.');
+    if (isNaN(dailyHoursVal) || dailyHoursVal <= 0) errors.push('하루 평균 공부 가능 시간은 0보다 커야 합니다.');
+    if (startStr){
+      var sd = parseISODate(startStr);
+      parsed.subjects.forEach(function(s){ if (parseISODate(s.examDate) < sd) errors.push(s.name+': 시험 날짜가 계획 시작일보다 이전입니다.'); });
+    }
+    if (errors.length > 0){ errorTextEl.innerHTML = errors.join('<br>'); errorTextEl.style.display = 'block'; return; }
+
+    isBusy = true;
+    state = { subjects: parsed.subjects, dailyHours: dailyHoursVal, startDate: startStr, historyByDate: {} };
+    await saveState();
+    syncStudyStats();
+    focusCalendarOnRelevantMonth();
+    renderCalendarView();
+    showView('calendarView');
+    isBusy = false;
+  });
+
+  function focusCalendarOnRelevantMonth(){
+    var t = todayDate(), s = startDateObj(), h = horizonEndDate();
+    var focus = t < s ? s : (t > h ? h : t);
+    viewYear = focus.getFullYear(); viewMonth = focus.getMonth();
+    selectedDateStr = toISODate(focus);
+  }
+
+  // ---------- edit settings view ----------
+  var editSubjectListEl = document.getElementById('editSubjectList');
+  var editErrorTextEl = document.getElementById('editErrorText');
+
+  document.getElementById('editSettingsBtn').addEventListener('click', function(){
+    editSubjectListEl.innerHTML = '';
+    editErrorTextEl.style.display = 'none';
+    state.subjects.forEach(function(s){
+      createSubjectCard(editSubjectListEl, {
+        name: s.name, date: s.examDate, scope: s.scope, hours: s.totalHours,
+        difficulty: s.difficulty, importance: s.importance
+      }, { existing: true, existingId: s.id, existingColor: s.color, existingProgress: s.initialProgress });
+    });
+    document.getElementById('editStartDateLabel').textContent =
+      startDateObj().getFullYear()+'년 '+(startDateObj().getMonth()+1)+'월 '+startDateObj().getDate()+'일';
+    document.getElementById('editDailyHours').value = state.dailyHours;
+    showView('editView');
+  });
+
+  document.getElementById('addEditSubjectBtn').addEventListener('click', function(){
+    createSubjectCard(editSubjectListEl, null, {});
+  });
+
+  document.getElementById('cancelEditBtn').addEventListener('click', function(){
+    renderCalendarView();
+    showView('calendarView');
+  });
+
+  document.getElementById('saveEditBtn').addEventListener('click', async function(){
+    if (isBusy) return;
+    editErrorTextEl.style.display = 'none';
+    var dailyHoursVal = parseFloat(document.getElementById('editDailyHours').value);
+    var todayISO = toISODate(todayDate());
+    var parsed = readSubjectsFromContainer(editSubjectListEl, todayISO);
+    var errors = parsed.errors;
+    if (isNaN(dailyHoursVal) || dailyHoursVal <= 0) errors.push('하루 평균 공부 가능 시간은 0보다 커야 합니다.');
+    if (parsed.subjects.length === 0) errors.push('과목이 최소 1개는 있어야 해요.');
+    if (errors.length > 0){ editErrorTextEl.innerHTML = errors.join('<br>'); editErrorTextEl.style.display = 'block'; return; }
+
+    isBusy = true;
+    state.subjects = parsed.subjects;
+    state.dailyHours = dailyHoursVal;
+    await saveState();
+    syncStudyStats();
+    focusCalendarOnRelevantMonth();
+    renderCalendarView();
+    showView('calendarView');
+    showToast('설정을 저장했어요. 이후 계획이 새로 계산됐어요.');
+    isBusy = false;
+  });
+
+  // ---------- calendar rendering ----------
+  function buildMonthCells(year, month){
+    var firstOfMonth = new Date(year, month, 1);
+    var startWeekday = firstOfMonth.getDay();
+    var daysInMonth = new Date(year, month+1, 0).getDate();
+    var cells = [];
+    for (var i=0;i<startWeekday;i++) cells.push(new Date(year, month, 1-(startWeekday-i)));
+    for (var day=1; day<=daysInMonth; day++) cells.push(new Date(year, month, day));
+    while (cells.length % 7 !== 0) cells.push(addDays(cells[cells.length-1], 1));
+    return cells;
+  }
+
+  function dayInfo(dayDate, forecastMap){
+    var dateStr = toISODate(dayDate);
+    var today = todayDate();
+    var s = startDateObj(), h = horizonEndDate();
+    var inRange = dayDate >= s && dayDate <= h;
+    var examSubjects = inRange ? state.subjects.filter(function(x){ return sameDate(parseISODate(x.examDate), dayDate); }) : [];
+    var isToday = sameDate(dayDate, today);
+    var isFuture = dayDate > today;
+    var isPast = dayDate < today;
+
+    var allocMap;
+    if (!inRange) allocMap = {};
+    else if (isFuture) allocMap = forecastMap[dateStr] || {};
+    else allocMap = recommendedForDay(dayDate);
+
+    var totalRecommended = 0;
+    Object.keys(allocMap).forEach(function(id){ totalRecommended += allocMap[id]; });
+
+    var hasCheckin = inRange && state.historyByDate.hasOwnProperty(dateStr);
+    var actualMap = hasCheckin ? state.historyByDate[dateStr] : {};
+    var totalActual = 0;
+    Object.keys(actualMap).forEach(function(id){ totalActual += (actualMap[id]||0); });
+
+    var status = null;
+    if (inRange && !isFuture){
+      if (hasCheckin){
+        if (totalRecommended <= 0.01) status = 'done';
+        else {
+          var ratio = totalActual / totalRecommended;
+          status = ratio >= 0.99 ? 'done' : (ratio > 0 ? 'partial' : 'zero');
+        }
+      } else if (isPast) status = 'unreviewed';
+    }
+
+    return {
+      dateStr: dateStr, inRange: inRange, isToday: isToday, isFuture: isFuture, isPast: isPast,
+      examSubjects: examSubjects, allocMap: allocMap, totalRecommended: totalRecommended,
+      hasCheckin: hasCheckin, actualMap: actualMap, totalActual: totalActual, status: status
+    };
+  }
+
+  function renderFeasibilityBanner(){
+    var el = document.getElementById('feasibilityBanner');
+    var today = todayDate();
+    if (today > horizonEndDate()){ el.innerHTML = ''; return; }
+    var shortfalls = computeShortfalls();
+    if (shortfalls.length === 0){
+      el.innerHTML = '<div class="banner ok">✓ 지금 페이스대로면 모든 과목을 시험 전까지 계획한 만큼 끝낼 수 있어요.</div>';
+    } else {
+      var msg = shortfalls.map(function(s){ return '<b>'+escapeHtml(s.name)+'</b> '+s.shortfall.toFixed(1)+'h 부족'; }).join(' · ');
+      el.innerHTML = '<div class="banner warn">⚠ 지금 페이스로는 시간이 부족해요: '+msg+'. 하루 공부 시간을 늘리거나 <span class="banner-action" id="openEditFromBanner">설정에서 조정</span>해보세요.</div>';
+      var link = document.getElementById('openEditFromBanner');
+      if (link) link.addEventListener('click', function(){ document.getElementById('editSettingsBtn').click(); });
+    }
+  }
+
+  function renderCalendarView(){
+    var today = todayDate();
+    var nearestExam = state.subjects.reduce(function(min, s){
+      var ed = parseISODate(s.examDate); return (!min || ed < min) ? ed : min;
+    }, null);
+    document.getElementById('ddayDateLabel').textContent = today.getFullYear()+'년 '+(today.getMonth()+1)+'월 '+today.getDate()+'일 ('+WEEKDAY[today.getDay()]+') 기준';
+    var ddayEl = document.getElementById('ddayNumLabel');
+    if (nearestExam){
+      var diff = daysBetween(today, nearestExam);
+      ddayEl.textContent = diff < 0 ? '종료' : (diff === 0 ? 'D-DAY' : 'D-'+diff);
+    }
+    document.getElementById('finishedBadge').hidden = !(today > horizonEndDate());
+
+    renderFeasibilityBanner();
+
+    document.getElementById('legend').innerHTML = state.subjects.map(function(s){
+      return '<span><span class="dot" style="background:'+s.color+'"></span>'+escapeHtml(s.name)+'</span>';
+    }).join('');
+
+    var s = startDateObj(), h = horizonEndDate();
+    var minYM = s.getFullYear()*12 + s.getMonth();
+    var maxYM = h.getFullYear()*12 + h.getMonth();
+    var curYM = viewYear*12 + viewMonth;
+    if (curYM < minYM){ viewYear = s.getFullYear(); viewMonth = s.getMonth(); }
+    if (curYM > maxYM){ viewYear = h.getFullYear(); viewMonth = h.getMonth(); }
+    curYM = viewYear*12 + viewMonth;
+
+    document.getElementById('monthLabel').textContent = viewYear+'년 '+MONTHNAMES[viewMonth];
+    document.getElementById('prevMonthBtn').disabled = (curYM <= minYM);
+    document.getElementById('nextMonthBtn').disabled = (curYM >= maxYM);
+
+    var forecastMap = buildForecastMap();
+    var cells = buildMonthCells(viewYear, viewMonth);
+    var grid = document.getElementById('calGrid');
+    grid.innerHTML = cells.map(function(cellDate){
+      var inMonth = cellDate.getMonth() === viewMonth;
+      var info = dayInfo(cellDate, forecastMap);
+      var wd = cellDate.getDay();
+      var wdClass = wd===6 ? 'sat' : (wd===0 ? 'sun' : '');
+      var classes = ['cal-cell'];
+      if (!inMonth) classes.push('dim');
+      if (!info.inRange) classes.push('out-range');
+      if (info.isToday) classes.push('today');
+      if (info.examSubjects.length>0) classes.push('exam');
+      if (selectedDateStr === info.dateStr) classes.push('selected');
+
+      var html = '<div class="'+classes.join(' ')+'" data-date="'+info.dateStr+'" data-inrange="'+(info.inRange?'1':'0')+'">';
+      if (info.inRange && info.isToday && !info.hasCheckin){
+        html += '<button type="button" class="cal-check" data-quick-date="'+info.dateStr+'" aria-label="오늘 전체 완료 체크" title="오늘 전체 완료로 체크">☐</button>';
+      } else if (info.inRange && info.hasCheckin){
+        html += '<button type="button" class="cal-check checked" data-quick-date="'+info.dateStr+'" aria-label="체크 해제" title="체크 해제">✓</button>';
+      }
+      if (info.examSubjects.length>0){
+        html += '<span class="cal-exam-tag">시험'+(info.examSubjects.length>1?' '+info.examSubjects.length:'')+'</span>';
+      }
+      html += '<span class="cal-date '+wdClass+'">'+cellDate.getDate()+'</span>';
+      if (info.inRange){
+        var hoursClass = info.isFuture ? 'cal-hours future' : (info.totalRecommended<=0.01 ? 'cal-hours zero' : 'cal-hours');
+        html += '<span class="'+hoursClass+'">'+(info.totalRecommended>0.01 ? info.totalRecommended.toFixed(1)+'h' : '-') +'</span>';
+        var dotIds = Object.keys(info.allocMap).filter(function(id){ return info.allocMap[id]>0.01; });
+        if (dotIds.length>0){
+          html += '<div class="cal-dots">' + dotIds.map(function(id){
+            var subj = state.subjects.filter(function(x){ return x.id===id; })[0];
+            return subj ? '<span style="background:'+subj.color+'"></span>' : '';
+          }).join('') + '</div>';
+        }
+        if (info.status){
+          var symbol = info.status==='done' ? '✓' : (info.status==='partial' ? '◐' : (info.status==='zero' ? '✕' : '—'));
+          html += '<span class="cal-status '+info.status+'">'+symbol+'</span>';
+        }
+      }
+      html += '</div>';
+      return html;
+    }).join('');
+
+    grid.querySelectorAll('.cal-cell[data-inrange="1"]').forEach(function(cellEl){
+      cellEl.addEventListener('click', function(e){
+        if (e.target.closest('[data-quick-date]')) return;
+        selectedDateStr = cellEl.dataset.date;
+        renderCalendarView();
+        document.getElementById('detailPanel').scrollIntoView({ behavior:'smooth', block:'nearest' });
+      });
+    });
+    grid.querySelectorAll('[data-quick-date]').forEach(function(btn){
+      btn.addEventListener('click', async function(e){
+        e.stopPropagation();
+        if (isBusy) return;
+        isBusy = true;
+        var dstr = btn.dataset.quickDate;
+        if (state.historyByDate.hasOwnProperty(dstr)){
+          delete state.historyByDate[dstr];
+          showToast('체크를 해제했어요.');
+        } else {
+          var alloc = recommendedForDay(parseISODate(dstr));
+          var entry = {};
+          Object.keys(alloc).forEach(function(id){ entry[id] = round1(alloc[id]); });
+          state.historyByDate[dstr] = entry;
+          showToast('오늘 학습을 모두 완료로 체크했어요.');
+        }
+        await saveState();
+        syncStudyStats();
+        selectedDateStr = dstr;
+        renderCalendarView();
+        isBusy = false;
+      });
+    });
+
+    renderDetailPanel(forecastMap);
+    loadLeaderboard();
+  }
+
+  function renderDetailPanel(forecastMap){
+    var panel = document.getElementById('detailPanel');
+    if (!selectedDateStr){ panel.innerHTML = '<div class="detail-empty">날짜를 선택하면 상세 계획이 여기에 표시돼요.</div>'; return; }
+    var dayDate = parseISODate(selectedDateStr);
+    var info = dayInfo(dayDate, forecastMap);
+    var wd = dayDate.getDay();
+    var todayFlag = info.isToday;
+
+    var html = '';
+    html += '<div class="detail-head"><div class="d-title">'+(dayDate.getMonth()+1)+'월 '+dayDate.getDate()+'일 ('+WEEKDAY[wd]+')'+(todayFlag?' · 오늘':'')+'</div>';
+    var nearestExam = state.subjects.reduce(function(min, s){ var ed=parseISODate(s.examDate); return (!min||ed<min)?ed:min; }, null);
+    if (nearestExam){
+      var d2 = daysBetween(dayDate, nearestExam);
+      html += '<div class="d-dday mono">'+(d2===0?'D-DAY':(d2>0?'D-'+d2:''))+'</div>';
+    }
+    html += '</div>';
+
+    if (!info.inRange){
+      html += '<div class="detail-note">이 날짜는 계획 기간(시작일~마지막 시험일) 밖이에요.</div>';
+      panel.innerHTML = html;
+      return;
+    }
+
+    if (info.examSubjects.length>0){
+      html += '<div class="detail-exam">🎯 시험일: ' + info.examSubjects.map(function(s){return escapeHtml(s.name);}).join(', ') + '</div>';
+    }
+
+    if (info.isFuture){
+      html += '<div class="detail-note">아직 오지 않은 날이에요. 지금까지의 진행 상황을 바탕으로 예상한 권장 학습량이에요 (당일이 되면 값이 조금 달라질 수 있어요).</div>';
+    } else if (todayFlag){
+      html += '<div class="detail-note">오늘 배정된 학습량이에요. 실제로 공부한 시간을 입력하고 저장하면, 못한 만큼은 내일 이후로 자동 반영돼요.</div>';
+    } else {
+      html += '<div class="detail-note">'+(info.hasCheckin ? '이미 체크한 날이에요. 필요하면 값을 수정할 수 있어요.' : '아직 체크하지 않은 날이에요. 실제로 공부한 시간이 있다면 입력해보세요.')+'</div>';
+    }
+
+    var subjectIds = Object.keys(info.allocMap);
+    Object.keys(info.actualMap || {}).forEach(function(id){ if (subjectIds.indexOf(id)===-1) subjectIds.push(id); });
+
+    if (subjectIds.length === 0){
+      html += '<div class="detail-empty">이 날은 배정된 과목이 없어요.</div>';
+      panel.innerHTML = html;
+      return;
+    }
+
+    var readOnly = info.isFuture;
+    subjectIds.forEach(function(id){
+      var subj = state.subjects.filter(function(x){ return x.id===id; })[0];
+      if (!subj) return;
+      var recommended = round1(info.allocMap[id] || 0);
+      var actual = info.actualMap && typeof info.actualMap[id]==='number' ? info.actualMap[id] : recommended;
+      html += '<div class="ci-card" data-subject-id="'+id+'" style="border-left-color:'+subj.color+'">' +
+        '<div class="ci-head"><div class="ci-name"><span class="ci-dot" style="background:'+subj.color+'"></span>'+escapeHtml(subj.name)+'</div>' +
+        '<span class="ci-plan mono">권장 '+recommended.toFixed(1)+'h</span></div>' +
+        (subj.scope ? '<div class="ci-plan" style="margin-top:4px;">'+escapeHtml(subj.scope)+'</div>' : '');
+      if (readOnly){
+        html += '<div class="ci-controls"><span class="ci-plan">예정된 계획 (아직 체크 불가)</span></div>';
+      } else {
+        html += '<div class="ci-controls">' +
+          '<button type="button" class="quick-btn qb-full" data-full="'+recommended+'">완료</button>' +
+          '<button type="button" class="quick-btn qb-none">미완료</button>' +
+          '<input type="number" min="0" step="0.5" class="ci-hours" value="'+actual.toFixed(1)+'">' +
+          '<span>h</span><span class="ci-status" data-role="status"></span>' +
+        '</div>';
+      }
+      html += '</div>';
+    });
+
+    if (!readOnly){
+      html += '<div class="detail-save-row"><button class="primary-btn" id="saveDetailBtn" type="button">이 날짜 저장하기</button>' +
+        '<span class="save-hint">저장하면 이후 날짜의 권장 학습량과 부족 경고가 자동으로 다시 계산돼요.</span></div>';
+    }
+
+    panel.innerHTML = html;
+    if (readOnly) return;
+
+    panel.querySelectorAll('.ci-card').forEach(function(card){
+      var recommended = parseFloat(card.querySelector('.qb-full').dataset.full) || 0;
+      var input = card.querySelector('.ci-hours');
+      var statusEl = card.querySelector('[data-role=status]');
+      function updateStatus(){
+        var v = parseFloat(input.value); if (isNaN(v) || v<0) v = 0;
+        var pct = recommended>0 ? (v/recommended)*100 : (v>0?100:0);
+        statusEl.classList.remove('full','partial','none');
+        if (recommended<=0.01){ statusEl.textContent = v>0 ? '기록됨' : ''; statusEl.classList.add(v>0?'full':'none'); }
+        else if (v<=0){ statusEl.textContent='미완료'; statusEl.classList.add('none'); }
+        else if (pct>=99.5){ statusEl.textContent='완료'; statusEl.classList.add('full'); }
+        else { statusEl.textContent='부분 완료 '+Math.round(pct)+'%'; statusEl.classList.add('partial'); }
+      }
+      input.addEventListener('input', updateStatus);
+      card.querySelector('.qb-full').addEventListener('click', function(){ input.value = recommended.toFixed(1); updateStatus(); });
+      card.querySelector('.qb-none').addEventListener('click', function(){ input.value = '0'; updateStatus(); });
+      updateStatus();
+    });
+
+    var saveBtn = document.getElementById('saveDetailBtn');
+    if (saveBtn){
+      saveBtn.addEventListener('click', async function(){
+        if (isBusy) return;
+        isBusy = true; saveBtn.disabled = true;
+        var entry = {};
+        panel.querySelectorAll('.ci-card').forEach(function(card){
+          var id = card.dataset.subjectId;
+          var v = parseFloat(card.querySelector('.ci-hours').value);
+          if (isNaN(v) || v<0) v = 0;
+          entry[id] = round1(v);
+        });
+        state.historyByDate[selectedDateStr] = entry;
+        await saveState();
+        syncStudyStats();
+        renderCalendarView();
+        showToast('저장했어요. 이후 계획이 자동으로 다시 계산됐어요.');
+        isBusy = false;
+      });
+    }
+  }
+
+  document.getElementById('prevMonthBtn').addEventListener('click', function(){
+    viewMonth -= 1; if (viewMonth < 0){ viewMonth = 11; viewYear -= 1; }
+    renderCalendarView();
+  });
+  document.getElementById('nextMonthBtn').addEventListener('click', function(){
+    viewMonth += 1; if (viewMonth > 11){ viewMonth = 0; viewYear += 1; }
+    renderCalendarView();
+  });
+
+  // ---------- reset ----------
+  var resetBtn = document.getElementById('resetBtn');
+  var resetArmed = false, resetTimer = null;
+  resetBtn.addEventListener('click', async function(){
+    if (!resetArmed){
+      resetArmed = true; resetBtn.textContent = '정말요? 한 번 더 클릭'; resetBtn.classList.add('confirming');
+      resetTimer = setTimeout(function(){ resetArmed=false; resetBtn.textContent='처음부터 다시 설정'; resetBtn.classList.remove('confirming'); }, 3000);
+      return;
+    }
+    clearTimeout(resetTimer); resetArmed=false; resetBtn.textContent='처음부터 다시 설정'; resetBtn.classList.remove('confirming');
+    state = null; selectedDateStr = null;
+    await clearStoredState();
+    initSetupForm();
+    showView('setupView');
+  });
+
+  // ---------- init ----------
+  (async function init(){
+    showView('loadingView');
+    var stored = await loadStoredState();
+    if (!stored || !stored.subjects || stored.subjects.length === 0){
+      initSetupForm();
+      showView('setupView');
+      return;
+    }
+    state = stored;
+    if (!state.historyByDate) state.historyByDate = {};
+    focusCalendarOnRelevantMonth();
+    renderCalendarView();
+    showView('calendarView');
+  })();
+
+})();
+</script>
+</body>
+</html>
