@@ -1,6 +1,6 @@
 -- 디데이플랜 Calendar (dday-plan-vercel) — 사용 데이터 테이블
--- 기존 mvp-service Supabase 프로젝트(gxyctacjrvuxudxukksi)를 그대로 재사용합니다.
--- 이 사이트 전용 테이블이라 기존 plan_snapshots / daily_logs 테이블과는 무관합니다.
+-- 이 사이트 전용 Supabase 프로젝트("dday plan", kvpbctapwesdqznnrsqv)에서 실행합니다.
+-- mvp-service 프로젝트(gxyctacjrvuxudxukksi)의 plan_snapshots / daily_logs와는 무관한 별개 프로젝트입니다.
 -- Supabase 대시보드 > SQL Editor 에서 그대로 실행하세요.
 --
 -- 로그인 기능이 없는 앱이라 사용자는 브라우저에 저장된 랜덤 device_id로 구분합니다.

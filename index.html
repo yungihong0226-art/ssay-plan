@@ -420,8 +420,8 @@
   // 하루 평균 공부시간 / 공부 진행률 / 시험까지 남은 기간 평균을 기기 하나당 한 행으로
   // study_stats 테이블에 저장(upsert)합니다. 다른 이용자 현황 패널에서 이 표를 그대로
   // 읽어와 동기부여용으로 보여줍니다.
-  var SUPABASE_URL = 'https://gxyctacjrvuxudxukksi.supabase.co';
-  var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd4eWN0YWNqcnZ1eHVkeHVra3NpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcxMjY4MDksImV4cCI6MjEwMjcwMjgwOX0.V7m7NLjZ4C-qLNk7-ETjO0Vk8VkOT0HwpsZDtvC7Sg8';
+  var SUPABASE_URL = 'https://kvpbctapwesdqznnrsqv.supabase.co';
+  var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt2cGJjdGFwd2VzZHF6bm5yc3F2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcxMzQ0NTMsImV4cCI6MjEwMjcxMDQ1M30.wIp_0Rqf9-0WJ-b3EmEk-3V6oVDDGhU7hp0ox0TPysk';
   var supabaseClient = (SUPABASE_URL.indexOf('YOUR_') !== 0 && window.supabase)
     ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
     : null;

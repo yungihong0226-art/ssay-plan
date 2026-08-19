@@ -30,6 +30,6 @@
 
 ### 설정 방법
 
-1. Supabase 대시보드(기존 mvp-service와 같은 프로젝트, `gxyctacjrvuxudxukksi`)의 SQL Editor에서 [`supabase/schema.sql`](supabase/schema.sql)을 실행해 `study_stats` 테이블을 만듭니다.
-2. `index.html`의 `SUPABASE_URL`/`SUPABASE_ANON_KEY`는 이미 같은 프로젝트 값으로 채워져 있습니다.
+1. Supabase 대시보드(이 사이트 전용 프로젝트 "dday plan", `kvpbctapwesdqznnrsqv`)의 SQL Editor에서 [`supabase/schema.sql`](supabase/schema.sql)을 실행해 `study_stats` 테이블을 만듭니다.
+2. `index.html`의 `SUPABASE_URL`/`SUPABASE_ANON_KEY`는 이미 이 프로젝트 값으로 채워져 있습니다.
 3. Vercel 프로젝트(`dday-plan-vercel`)를 이 저장소에 연결하면 push할 때마다 자동 배포됩니다.
