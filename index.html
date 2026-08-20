@@ -683,31 +683,37 @@
     return round1(total / state.subjects.length);
   }
 
-  // 계획 시작일부터 "어제"까지 지난 날들 중, 그날 권장 학습량을 100% 채운 날의 비율(%).
-  // 오늘은 아직 끝나지 않았으니 집계에서 제외한다.
-  function computeDailyCheckCompletionRate(){
+  // 집계 대상 날짜 목록: 계획 시작일부터 어제까지는 항상 포함하고, 오늘은
+  // "이미 체크인했을 때만" 포함한다. 아직 체크 안 한 오늘까지 분모에 넣으면
+  // 계획을 막 시작한 사람은 항상 0%가 나와서, 오늘 체크한 순간부터 바로
+  // 의미 있는 수치가 뜨도록 이렇게 처리한다.
+  function countedDaysSoFar(){
     var startD = startDateObj(), today = todayDate();
-    var elapsedDays = daysBetween(startD, today);
-    if (elapsedDays <= 0) return 0;
-    var completed = 0;
-    for (var d = new Date(startD); d < today; d = addDays(d,1)){
-      if (isPlanFullyCompletedForDate(d)) completed++;
-    }
-    return round1(completed / elapsedDays * 100);
+    var days = [];
+    for (var d = new Date(startD); d < today; d = addDays(d,1)) days.push(new Date(d));
+    if (state.historyByDate.hasOwnProperty(toISODate(today))) days.push(today);
+    return days;
   }
 
-  // 어제부터 거슬러 올라가며 하루도 빠짐없이 체크인한 연속 일수 ÷ 전체 경과일수(%).
-  // 중간에 한 번이라도 체크인이 없는 날이 나오면 그 지점에서 스트릭 계산을 멈춘다.
+  // 집계 대상 날짜 중, 그날 권장 학습량을 100% 채운 날의 비율(%).
+  function computeDailyCheckCompletionRate(){
+    var days = countedDaysSoFar();
+    if (days.length === 0) return 0;
+    var completed = days.filter(function(d){ return isPlanFullyCompletedForDate(d); }).length;
+    return round1(completed / days.length * 100);
+  }
+
+  // 집계 대상 날짜 중 가장 최근 날짜부터 거슬러 올라가며 하루도 빠짐없이
+  // 체크인한 연속 일수 ÷ 집계 대상 일수(%). 중간에 체크인이 없는 날이 나오면 멈춘다.
   function computeConsecutiveUsageRate(){
-    var startD = startDateObj(), today = todayDate();
-    var elapsedDays = daysBetween(startD, today);
-    if (elapsedDays <= 0) return 0;
+    var days = countedDaysSoFar();
+    if (days.length === 0) return 0;
     var streak = 0;
-    for (var d = addDays(today,-1); d >= startD; d = addDays(d,-1)){
-      if (state.historyByDate.hasOwnProperty(toISODate(d))) streak++;
+    for (var i = days.length - 1; i >= 0; i--){
+      if (state.historyByDate.hasOwnProperty(toISODate(days[i]))) streak++;
       else break;
     }
-    return round1(streak / elapsedDays * 100);
+    return round1(streak / days.length * 100);
   }
 
   // 같은 기기가 여러 번 계획을 만들거나 체크인해도 매번 새 행을 남긴다 (덮어쓰지 않음).
