@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://dday-plan-vercel.vercel.app/sitemap.xml
