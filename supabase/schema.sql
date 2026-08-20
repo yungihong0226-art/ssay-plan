@@ -45,7 +45,10 @@ create policy "anyone can read study_stats" on study_stats
   for select to anon using (true);
 
 -- 기기별 가장 최근 스냅샷만 모은 뷰. 앱의 "다른 이용자 현황" 패널은 이 뷰를 읽습니다.
-create or replace view study_stats_latest
+-- (CREATE OR REPLACE VIEW는 기존 컬럼 순서 중간에 새 컬럼을 끼워 넣을 수 없어서
+-- 드롭 후 재생성한다 — 뷰는 데이터를 담고 있지 않으므로 안전하다.)
+drop view if exists study_stats_latest;
+create view study_stats_latest
 with (security_invoker = true) as
 select distinct on (device_id)
   device_id, avg_daily_hours, progress_rate, avg_days_before_exam,

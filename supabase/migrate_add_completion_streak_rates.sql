@@ -7,7 +7,10 @@ alter table study_stats
   add column if not exists consecutive_usage_rate numeric not null default 0;
 
 -- 새 컬럼을 포함하도록 리더보드용 뷰를 다시 만든다.
-create or replace view study_stats_latest
+-- (CREATE OR REPLACE VIEW는 기존 컬럼 순서 중간에 새 컬럼을 끼워 넣을 수 없어서
+-- 드롭 후 재생성한다 — 뷰는 데이터를 담고 있지 않으므로 안전하다.)
+drop view if exists study_stats_latest;
+create view study_stats_latest
 with (security_invoker = true) as
 select distinct on (device_id)
   device_id, avg_daily_hours, progress_rate, avg_days_before_exam,
