@@ -683,6 +683,33 @@
     return round1(total / state.subjects.length);
   }
 
+  // 계획 시작일부터 "어제"까지 지난 날들 중, 그날 권장 학습량을 100% 채운 날의 비율(%).
+  // 오늘은 아직 끝나지 않았으니 집계에서 제외한다.
+  function computeDailyCheckCompletionRate(){
+    var startD = startDateObj(), today = todayDate();
+    var elapsedDays = daysBetween(startD, today);
+    if (elapsedDays <= 0) return 0;
+    var completed = 0;
+    for (var d = new Date(startD); d < today; d = addDays(d,1)){
+      if (isPlanFullyCompletedForDate(d)) completed++;
+    }
+    return round1(completed / elapsedDays * 100);
+  }
+
+  // 어제부터 거슬러 올라가며 하루도 빠짐없이 체크인한 연속 일수 ÷ 전체 경과일수(%).
+  // 중간에 한 번이라도 체크인이 없는 날이 나오면 그 지점에서 스트릭 계산을 멈춘다.
+  function computeConsecutiveUsageRate(){
+    var startD = startDateObj(), today = todayDate();
+    var elapsedDays = daysBetween(startD, today);
+    if (elapsedDays <= 0) return 0;
+    var streak = 0;
+    for (var d = addDays(today,-1); d >= startD; d = addDays(d,-1)){
+      if (state.historyByDate.hasOwnProperty(toISODate(d))) streak++;
+      else break;
+    }
+    return round1(streak / elapsedDays * 100);
+  }
+
   // 같은 기기가 여러 번 계획을 만들거나 체크인해도 매번 새 행을 남긴다 (덮어쓰지 않음).
   function syncStudyStats(){
     if (!supabaseClient) return;
@@ -690,7 +717,9 @@
       device_id: getDeviceId(),
       avg_daily_hours: computeAvgDailyHours(),
       progress_rate: computeOverallProgressRate(),
-      avg_days_before_exam: computeAvgDaysBeforeExam()
+      avg_days_before_exam: computeAvgDaysBeforeExam(),
+      daily_check_completion_rate: computeDailyCheckCompletionRate(),
+      consecutive_usage_rate: computeConsecutiveUsageRate()
     }).then(function(res){
       if (res.error) console.warn('analytics(study_stats) failed', res.error);
     });
